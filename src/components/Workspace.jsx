@@ -92,17 +92,16 @@ export default function Workspace({ teamName, onExit }) {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
             <span style={{
-              fontSize: '1rem', background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800,
+              fontSize: '1rem', color: 'var(--text-primary)', fontWeight: 700,
             }}>SyntaxLab</span>
           </div>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px',
-            background: 'rgba(99,102,241,0.1)', borderRadius: 6,
-            border: '1px solid rgba(99,102,241,0.2)',
+            background: 'var(--bg-elevated)', borderRadius: 6,
+            border: '1px solid var(--border)',
           }}>
-            <span style={{ fontSize: '0.65rem', letterSpacing: '0.1em', color: 'var(--accent-primary)', fontWeight: 700, textTransform: 'uppercase' }}>Team</span>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600 }}>{teamName}</span>
+            <span style={{ fontSize: '0.65rem', letterSpacing: '0.1em', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Team</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500 }}>{teamName}</span>
           </div>
         </div>
 
@@ -158,7 +157,7 @@ export default function Workspace({ teamName, onExit }) {
                     transition: 'all 0.15s',
                     display: 'flex', alignItems: 'center', gap: 8,
                   }}
-                  onMouseEnter={e => { e.target.style.background = 'rgba(99,102,241,0.1)'; e.target.style.color = 'var(--text-primary)'; }}
+                  onMouseEnter={e => { e.target.style.background = 'var(--bg-elevated)'; e.target.style.color = 'var(--text-primary)'; }}
                   onMouseLeave={e => { e.target.style.background = 'none'; e.target.style.color = 'var(--text-secondary)'; }}
                   title="Click to insert SELECT"
                 >
@@ -191,7 +190,7 @@ export default function Workspace({ teamName, onExit }) {
         }}>
           <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
             {selectedDb ? (
-              <><span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>{selectedDb}</span> · SQL Editor</>
+              <><span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{selectedDb}</span> · SQL Editor</>
             ) : 'No database selected'}
           </span>
           <span style={{ flex: 1 }} />
@@ -226,7 +225,7 @@ export default function Workspace({ teamName, onExit }) {
               fontSize: '0.9rem',
               lineHeight: 1.7,
               tabSize: 2,
-              background: '#0d1117',
+              background: 'var(--bg-base)',
               border: '1px solid var(--border)',
               borderRadius: 10,
               color: '#e6edf3',
@@ -278,10 +277,10 @@ export default function Workspace({ teamName, onExit }) {
               {/* Stats bar */}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 16, padding: '8px 14px',
-                background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)',
+                background: 'var(--bg-panel)', border: '1px solid var(--border)',
                 borderRadius: 8, fontSize: '0.78rem',
               }}>
-                <span style={{ color: 'var(--accent-success)', fontWeight: 700 }}>✓ Success</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Success</span>
                 <span style={{ color: 'var(--text-muted)' }}>Rows: <strong style={{ color: 'var(--text-primary)' }}>{result.rows?.length ?? 0}</strong></span>
                 <span style={{ color: 'var(--text-muted)' }}>Time: <strong style={{ color: 'var(--text-primary)' }}>{result.stats?.time}</strong></span>
               </div>
@@ -297,8 +296,8 @@ export default function Workspace({ teamName, onExit }) {
                       <tr style={{ background: 'var(--bg-panel)' }}>
                         {result.columns.map(col => (
                           <th key={col} style={{
-                            padding: '10px 14px', textAlign: 'left', fontWeight: 600,
-                            color: 'var(--accent-primary)', fontSize: '0.78rem',
+                            padding: '10px 14px', textAlign: 'left', fontWeight: 500,
+                            color: 'var(--text-secondary)', fontSize: '0.78rem',
                             borderBottom: '1px solid var(--border)',
                             letterSpacing: '0.04em', whiteSpace: 'nowrap',
                           }}>
@@ -313,7 +312,7 @@ export default function Workspace({ teamName, onExit }) {
                           background: ri % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-panel)',
                           transition: 'background 0.1s',
                         }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.06)'}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-elevated)'}
                           onMouseLeave={e => e.currentTarget.style.background = ri % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-panel)'}
                         >
                           {result.columns.map(col => (

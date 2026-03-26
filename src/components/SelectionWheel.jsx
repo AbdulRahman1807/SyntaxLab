@@ -10,6 +10,26 @@ function weightedRandom(teams) {
 const SLOT_HEIGHT = 56;
 const VISIBLE_SLOTS = 7;
 
+function playTick() {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.05);
+    
+    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+  } catch(e) { /* ignore */ }
+}
+
 export default function SelectionWheel({ teams, onPicked }) {
   const [spinning, setSpinning] = useState(false);
   const [displayList, setDisplayList] = useState(teams);
@@ -38,18 +58,47 @@ export default function SelectionWheel({ teams, onPicked }) {
     // Reset position instantly
     await controls.set({ y: 0 });
 
-    // Spin animation
+    // Spin animation with custom onUpdate for tick sound
+    let lastTickPosition = 0;
+    
     await controls.start({
       y: targetY,
       transition: {
-        duration: 3.2,
-        ease: [0.1, 0.6, 0.4, 1],
+        duration: 4,
+        ease: [0.1, 0.6, 0.2, 1],
       }
     });
 
     setSpinning(false);
     if (onPicked) onPicked(winner);
   }
+
+  // To play tick, we can use useAnimationFrame or onUpdate. 
+  // framer-motion does not support onUpdate on transition directly,
+  // so we'll just let the visual spin happen. The audio could be synced carefully, 
+  // but to keep it simple, we will trigger ticks during spin 
+  // using an interval that slows down.
+  const runAudioTicks = () => {
+    if (spinning || teams.length === 0) return;
+    let delay = 30;
+    let active = true;
+    
+    const step = () => {
+      if (!active) return;
+      playTick();
+      delay += delay * 0.15; // slow down
+      if (delay < 400) {
+        setTimeout(step, delay);
+      }
+    };
+    step();
+    return () => { active = false; };
+  };
+
+  const startSpin = () => {
+    runAudioTicks();
+    spin();
+  };
 
   const listToShow = displayList.length > 0 ? displayList : teams;
 
@@ -79,9 +128,9 @@ export default function SelectionWheel({ teams, onPicked }) {
           position: 'absolute', top: '50%', left: 0, right: 0,
           height: SLOT_HEIGHT,
           transform: 'translateY(-50%)',
-          background: 'rgba(99,102,241,0.12)',
-          borderTop: '1px solid rgba(99,102,241,0.5)',
-          borderBottom: '1px solid rgba(99,102,241,0.5)',
+          background: 'rgba(255,255,255,0.03)',
+          borderTop: '1px solid var(--border-bright)',
+          borderBottom: '1px solid var(--border-bright)',
           zIndex: 1, pointerEvents: 'none',
         }} />
 
@@ -119,7 +168,7 @@ export default function SelectionWheel({ teams, onPicked }) {
       {/* Spin button */}
       <motion.button
         className="btn btn-primary"
-        onClick={spin}
+        onClick={startSpin}
         disabled={spinning || teams.length === 0}
         style={{ fontSize: '1rem', padding: '12px 40px', opacity: teams.length === 0 ? 0.4 : 1 }}
         whileHover={!spinning && teams.length > 0 ? { scale: 1.04 } : {}}
@@ -128,9 +177,9 @@ export default function SelectionWheel({ teams, onPicked }) {
         {spinning ? (
           <>
             <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
-            Spinning...
+            Selecting...
           </>
-        ) : '🎲 Spin the Wheel'}
+        ) : 'Select Team'}
       </motion.button>
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>

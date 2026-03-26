@@ -87,17 +87,14 @@ export default function App() {
           alignItems: 'center',
           gap: 12,
         }}>
-          <span style={{ fontSize: '1.35rem', fontWeight: 900, letterSpacing: '-0.02em' }}>
-            <span style={{
-              background: 'linear-gradient(135deg, #6366f1, #a78bfa)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text'
-            }}>Syntax</span>
-            <span style={{ color: 'var(--text-primary)' }}>Lab</span>
+          <span style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
+            <span style={{ color: 'var(--text-primary)' }}>Syntax</span>
+            <span style={{ color: 'var(--text-muted)' }}>Lab</span>
           </span>
           <span style={{
-            fontSize: '0.7rem', fontWeight: 600, color: 'var(--accent-primary)',
-            background: 'rgba(99,102,241,0.12)', borderRadius: 4, padding: '2px 8px',
-            border: '1px solid rgba(99,102,241,0.25)', letterSpacing: '0.06em', textTransform: 'uppercase'
+            fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)',
+            background: 'var(--bg-elevated)', borderRadius: 4, padding: '2px 8px',
+            border: '1px solid var(--border)', letterSpacing: '0.06em', textTransform: 'uppercase'
           }}>Lobby</span>
           <span style={{ flex: 1 }} />
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
@@ -120,7 +117,7 @@ export default function App() {
           {/* Left: Selection Wheel */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             <div>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: 6, color: 'var(--text-primary)' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 500, marginBottom: 6, color: 'var(--text-primary)' }}>
                 Team Selector
               </h2>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
@@ -137,12 +134,7 @@ export default function App() {
                 flexDirection: 'column',
                 alignItems: 'center',
               }}>
-                <div style={{
-                  position: 'absolute',
-                  width: 300, height: 200,
-                  background: 'radial-gradient(ellipse, rgba(99,102,241,0.12) 0%, transparent 70%)',
-                  pointerEvents: 'none', top: '50%', transform: 'translateY(-50%)',
-                }} />
+
                 <SelectionWheel
                   teams={activeTeams}
                   onPicked={handlePicked}
@@ -165,7 +157,7 @@ export default function App() {
           {/* Right: Team Management */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             <div>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: 6, color: 'var(--text-primary)' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 500, marginBottom: 6, color: 'var(--text-primary)' }}>
                 Team Management
               </h2>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>

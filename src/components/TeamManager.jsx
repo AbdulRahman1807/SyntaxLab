@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function TeamManager({ activeTeams, completedTeams, onAdd, onDelete, onReset }) {
   const [input, setInput] = useState('');
@@ -35,20 +36,30 @@ export default function TeamManager({ activeTeams, completedTeams, onAdd, onDele
           {activeTeams.length === 0 && (
             <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>No active teams</span>
           )}
-          {activeTeams.map(team => (
-            <span key={team} className="team-chip" style={{ cursor: 'default' }}>
-              {team}
-              <button
-                onClick={() => onDelete(team)}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'var(--accent-error)', fontSize: '0.9rem',
-                  lineHeight: 1, padding: '0 0 0 2px', opacity: 0.7
-                }}
-                title="Remove team"
-              >×</button>
-            </span>
-          ))}
+          <AnimatePresence>
+            {activeTeams.map(team => (
+              <motion.span 
+                key={team}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.2 }}
+                className="team-chip" 
+                style={{ cursor: 'default' }}
+              >
+                {team}
+                <button
+                  onClick={() => onDelete(team)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-secondary)', fontSize: '0.9rem',
+                    lineHeight: 1, padding: '0 0 0 4px', opacity: 0.7
+                  }}
+                  title="Remove team"
+                >×</button>
+              </motion.span>
+            ))}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -59,9 +70,18 @@ export default function TeamManager({ activeTeams, completedTeams, onAdd, onDele
             Completed ({completedTeams.length})
           </span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-            {completedTeams.map(team => (
-              <span key={team} className="team-chip done">{team}</span>
-            ))}
+            <AnimatePresence>
+              {completedTeams.map(team => (
+                <motion.span 
+                  key={team} 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="team-chip done"
+                >
+                  {team}
+                </motion.span>
+              ))}
+            </AnimatePresence>
           </div>
         </div>
       )}

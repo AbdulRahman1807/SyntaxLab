@@ -12,17 +12,7 @@ export default function RevealScreen({ teamName, onStartLab, onBack }) {
       position: 'relative',
       overflow: 'hidden',
     }}>
-      {/* Radial glow background */}
-      <div style={{
-        position: 'absolute',
-        width: 700,
-        height: 700,
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
-
-      {/* Animated ring */}
+      {/* Remove radial glow */}
       <motion.div
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -32,7 +22,7 @@ export default function RevealScreen({ teamName, onStartLab, onBack }) {
           width: 420,
           height: 420,
           borderRadius: '50%',
-          border: '2px solid rgba(99,102,241,0.3)',
+          border: '1px solid var(--border-bright)',
           pointerEvents: 'none',
         }}
       />
@@ -45,7 +35,7 @@ export default function RevealScreen({ teamName, onStartLab, onBack }) {
           width: 520,
           height: 520,
           borderRadius: '50%',
-          border: '1px solid rgba(99,102,241,0.15)',
+          border: '1px solid var(--border)',
           pointerEvents: 'none',
         }}
       />
@@ -61,11 +51,11 @@ export default function RevealScreen({ teamName, onStartLab, onBack }) {
             fontWeight: 700,
             letterSpacing: '0.2em',
             textTransform: 'uppercase',
-            color: 'var(--accent-primary)',
+            color: 'var(--text-secondary)',
             marginBottom: 16,
           }}
         >
-          🎉 Selected Team
+          Selected Team
         </motion.p>
 
         <motion.h1
@@ -75,10 +65,7 @@ export default function RevealScreen({ teamName, onStartLab, onBack }) {
           style={{
             fontSize: 'clamp(3rem, 10vw, 6rem)',
             fontWeight: 900,
-            background: 'linear-gradient(135deg, #a5b4fc, #818cf8, #c4b5fd)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
+            color: 'var(--text-primary)',
             letterSpacing: '-0.02em',
             lineHeight: 1.1,
             marginBottom: 48,
@@ -98,14 +85,14 @@ export default function RevealScreen({ teamName, onStartLab, onBack }) {
             onClick={onStartLab}
             style={{ fontSize: '1.1rem', padding: '14px 48px' }}
           >
-            🚀 Start Lab
+            Start Lab
           </button>
           <button
             className="btn btn-ghost"
             onClick={onBack}
             style={{ fontSize: '1rem', padding: '14px 28px' }}
           >
-            ← Back to Lobby
+            Back to Lobby
           </button>
         </motion.div>
       </div>
