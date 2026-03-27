@@ -59,5 +59,18 @@ export function useTeams(seedTeams) {
     setCompletedTeams([]);
   }, [completedTeams]);
 
-  return { activeTeams, completedTeams, addTeam, deleteTeam, completeTeam, resetSession };
+  const addTeams = useCallback((names) => {
+    setActiveTeams(prev => {
+      const existing = new Set([...prev, ...completedTeams]);
+      const missing = names.filter(n => !existing.has(n));
+      return [...prev, ...missing];
+    });
+  }, [completedTeams]);
+
+  const clearAllTeams = useCallback(() => {
+    setActiveTeams([]);
+    setCompletedTeams([]);
+  }, []);
+
+  return { activeTeams, completedTeams, addTeam, addTeams, deleteTeam, completeTeam, resetSession, clearAllTeams };
 }

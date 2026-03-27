@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { motion, useAnimation } from 'framer-motion';
+import MagneticButton from './MagneticButton';
 
 // Weighted random — all teams equal weight for now
 function weightedRandom(teams) {
@@ -30,15 +31,18 @@ function playTick() {
   } catch(e) { /* ignore */ }
 }
 
-export default function SelectionWheel({ teams, onPicked }) {
+export default function SelectionWheel({ teams, onPicked, onReset, hasCompleted, onSpinStateChange }) {
   const [spinning, setSpinning] = useState(false);
-  const [displayList, setDisplayList] = useState(teams);
+  const [displayList, setDisplayList] = useState([]);
+  const [pulse, setPulse] = useState(false);
+  const [winIndex, setWinIndex] = useState(-1);
   const controls = useAnimation();
   const containerRef = useRef(null);
 
   async function spin() {
     if (spinning || teams.length === 0) return;
     setSpinning(true);
+    if (onSpinStateChange) onSpinStateChange(true);
 
     const winner = weightedRandom(teams);
     // Build a long padded list so wheel scrolls through many slots
@@ -51,6 +55,7 @@ export default function SelectionWheel({ teams, onPicked }) {
     const targetIndex = Math.floor(repeats * teams.length * 0.8) + teams.indexOf(winner);
     extended.splice(targetIndex, 1, winner);
     setDisplayList(extended);
+    setWinIndex(targetIndex);
 
     // Scroll to center on targetIndex
     const targetY = -(targetIndex * SLOT_HEIGHT) + (Math.floor(VISIBLE_SLOTS / 2) * SLOT_HEIGHT);
@@ -70,7 +75,12 @@ export default function SelectionWheel({ teams, onPicked }) {
     });
 
     setSpinning(false);
-    if (onPicked) onPicked(winner);
+    if (onSpinStateChange) onSpinStateChange(false);
+    setPulse(true);
+    setTimeout(() => {
+      setPulse(false);
+      if (onPicked) onPicked(winner);
+    }, 1200); // Wait 1.2s to admire the pulse before moving to REVEAL
   }
 
   // To play tick, we can use useAnimationFrame or onUpdate. 
@@ -103,24 +113,27 @@ export default function SelectionWheel({ teams, onPicked }) {
   const listToShow = displayList.length > 0 ? displayList : teams;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, width: '100%' }}>
       {/* Wheel container */}
       <div
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: 340,
+          maxWidth: 400,
           height: SLOT_HEIGHT * VISIBLE_SLOTS,
           overflow: 'hidden',
-          borderRadius: 16,
-          background: 'var(--bg-panel)',
-          border: '1px solid var(--border)',
+          borderRadius: 8,
+          background: 'rgba(20, 20, 20, 0.4)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.5)',
         }}
       >
         {/* Gradient overlays for fade effect */}
         <div style={{
           position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
-          background: 'linear-gradient(to bottom, var(--bg-panel) 0%, transparent 30%, transparent 70%, var(--bg-panel) 100%)'
+          background: 'linear-gradient(to bottom, rgba(16,16,16,0.95) 0%, transparent 40%, transparent 60%, rgba(16,16,16,0.95) 100%)'
         }} />
 
         {/* Center highlight */}
@@ -132,12 +145,13 @@ export default function SelectionWheel({ teams, onPicked }) {
           borderTop: '1px solid var(--border-bright)',
           borderBottom: '1px solid var(--border-bright)',
           zIndex: 1, pointerEvents: 'none',
+          animation: pulse ? 'pulse-glow 1.2s ease-out' : 'none',
         }} />
 
         {/* Scrolling list */}
         <motion.div ref={containerRef} animate={controls} style={{ willChange: 'transform' }}>
           {listToShow.map((team, i) => (
-            <div key={i} style={{
+            <div key={i} className={pulse && i === winIndex ? 'glitch-text' : ''} style={{
               height: SLOT_HEIGHT,
               display: 'flex',
               alignItems: 'center',
@@ -165,22 +179,29 @@ export default function SelectionWheel({ teams, onPicked }) {
         )}
       </div>
 
-      {/* Spin button */}
-      <motion.button
-        className="btn btn-primary"
-        onClick={startSpin}
-        disabled={spinning || teams.length === 0}
-        style={{ fontSize: '1rem', padding: '12px 40px', opacity: teams.length === 0 ? 0.4 : 1 }}
-        whileHover={!spinning && teams.length > 0 ? { scale: 1.04 } : {}}
-        whileTap={!spinning && teams.length > 0 ? { scale: 0.97 } : {}}
-      >
-        {spinning ? (
-          <>
-            <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
-            Selecting...
-          </>
-        ) : 'Select Team'}
-      </motion.button>
+        {teams.length === 0 && hasCompleted ? (
+          <MagneticButton
+            className="btn btn-primary"
+            onClick={onReset}
+            style={{ fontSize: '1rem', padding: '12px 40px' }}
+          >
+            ↺ Reset Session
+          </MagneticButton>
+        ) : (
+          <MagneticButton
+            className="btn btn-primary"
+            onClick={startSpin}
+            disabled={spinning || teams.length === 0}
+            style={{ fontSize: '1rem', padding: '12px 40px', opacity: teams.length === 0 ? 0.4 : 1 }}
+          >
+            {spinning ? (
+              <>
+                <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
+                Selecting...
+              </>
+            ) : 'Select Team'}
+          </MagneticButton>
+        )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>

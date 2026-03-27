@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useTeams } from './hooks/useTeams';
 import SelectionWheel from './components/SelectionWheel';
 import TeamManager from './components/TeamManager';
 import RevealScreen from './components/RevealScreen';
 import Workspace from './components/Workspace';
+import ScrollBanner from './components/ScrollBanner';
+import SpotlightCard from './components/SpotlightCard';
+import { useDynamicTitle } from './hooks/useDynamicTitle';
 
 const SEED_TEAMS_URL = '/teams.json';
 
@@ -17,6 +21,10 @@ export default function App() {
   const [seedTeams, setSeedTeams] = useState([]);
   const [pickedTeam, setPickedTeam] = useState(null);
   const [seedLoaded, setSeedLoaded] = useState(false);
+  const [isSpinning, setIsSpinning] = useState(false);
+
+  // Dynamic Browser Tab Hook
+  useDynamicTitle(isSpinning);
 
   // Load seed from teams.json (only used if no localStorage yet)
   useEffect(() => {
@@ -27,7 +35,7 @@ export default function App() {
       .finally(() => setSeedLoaded(true));
   }, []);
 
-  const { activeTeams, completedTeams, addTeam, deleteTeam, completeTeam, resetSession } = useTeams(
+  const { activeTeams, completedTeams, addTeam, addTeams, deleteTeam, completeTeam, resetSession, clearAllTeams } = useTeams(
     seedLoaded ? seedTeams : []
   );
 
@@ -77,9 +85,13 @@ export default function App() {
         flexDirection: 'column',
         background: 'var(--bg-base)',
         overflow: 'auto',
+        position: 'relative' // Needed to constrain the fixed banner visually if necessary, though it spans screen
       }}>
-        {/* Header */}
+        <ScrollBanner />
+        
+        {/* Header (ensure z-index places UI above banner) */}
         <header style={{
+          position: 'relative', zIndex: 10,
           padding: '18px 32px',
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg-surface)',
@@ -103,29 +115,43 @@ export default function App() {
         </header>
 
         {/* Main layout */}
-        <div style={{
-          flex: 1,
-          display: 'grid',
-          gridTemplateColumns: '1fr 380px',
-          gap: 0,
-          maxWidth: 1200,
-          width: '100%',
-          margin: '0 auto',
-          padding: '40px 32px',
-          gap: 32,
-        }}>
+        <motion.div 
+          initial="hidden" animate="show"
+          variants={{
+            hidden: { opacity: 0 },
+            show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+          }}
+          style={{
+            position: 'relative', zIndex: 10,
+            flex: 1,
+            display: 'grid',
+            gridTemplateColumns: '1.2fr 450px',
+            gap: 48,
+            maxWidth: 1600,
+            width: '95%',
+            margin: '0 auto',
+            padding: '60px 40px',
+            pointerEvents: 'none' // Let mouse stream through to scroll banner
+          }}
+        >
           {/* Left: Selection Wheel */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div>
+          <motion.div 
+            variants={{ hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0, transition: { type: 'spring', bounce: 0.2, duration: 0.8 } } }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 24, pointerEvents: 'none' }}
+          >
+            <div style={{ pointerEvents: 'auto' }}>
               <h2 style={{ fontSize: '1.2rem', fontWeight: 500, marginBottom: 6, color: 'var(--text-primary)' }}>
                 Team Selector
               </h2>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                Spin the wheel to randomly pick the next team for the lab.
+                Spin the wheel to pick the next team.
               </p>
             </div>
 
-            <div className="glass-card" style={{ padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <SpotlightCard 
+              padding={32}
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'auto' }}
+            >
               {/* Subtle glow behind wheel */}
               <div style={{
                 position: 'relative',
@@ -138,25 +164,20 @@ export default function App() {
                 <SelectionWheel
                   teams={activeTeams}
                   onPicked={handlePicked}
+                  onReset={resetSession}
+                  hasCompleted={completedTeams.length > 0}
+                  onSpinStateChange={setIsSpinning}
                 />
               </div>
-
-              {activeTeams.length === 0 && completedTeams.length > 0 && (
-                <div style={{ marginTop: 20, textAlign: 'center' }}>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 12 }}>
-                    All teams have completed the lab!
-                  </p>
-                  <button className="btn btn-primary" onClick={resetSession}>
-                    ↺ Reset Session
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+            </SpotlightCard>
+          </motion.div>
 
           {/* Right: Team Management */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div>
+          <motion.div 
+            variants={{ hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0, transition: { type: 'spring', bounce: 0.2, duration: 0.8 } } }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 24, pointerEvents: 'none' }}
+          >
+            <div style={{ pointerEvents: 'auto' }}>
               <h2 style={{ fontSize: '1.2rem', fontWeight: 500, marginBottom: 6, color: 'var(--text-primary)' }}>
                 Team Management
               </h2>
@@ -165,17 +186,20 @@ export default function App() {
               </p>
             </div>
 
-            <div className="glass-card" style={{ padding: 24 }}>
+            <SpotlightCard padding={24} style={{ pointerEvents: 'auto' }}>
               <TeamManager
                 activeTeams={activeTeams}
                 completedTeams={completedTeams}
                 onAdd={addTeam}
+                onAddMultiple={addTeams}
                 onDelete={deleteTeam}
                 onReset={resetSession}
+                onClearAll={clearAllTeams}
+                disabled={isSpinning}
               />
-            </div>
-          </div>
-        </div>
+            </SpotlightCard>
+          </motion.div>
+        </motion.div>
       </div>
     </>
   );
