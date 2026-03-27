@@ -83,30 +83,39 @@ export default function SelectionWheel({ teams, onPicked, onReset, hasCompleted,
     }, 1200); // Wait 1.2s to admire the pulse before moving to REVEAL
   }
 
-  // To play tick, we can use useAnimationFrame or onUpdate. 
-  // framer-motion does not support onUpdate on transition directly,
-  // so we'll just let the visual spin happen. The audio could be synced carefully, 
-  // but to keep it simple, we will trigger ticks during spin 
-  // using an interval that slows down.
-  const runAudioTicks = () => {
-    if (spinning || teams.length === 0) return;
-    let delay = 30;
-    let active = true;
-    
-    const step = () => {
-      if (!active) return;
-      playTick();
-      delay += delay * 0.15; // slow down
-      if (delay < 400) {
-        setTimeout(step, delay);
-      }
-    };
-    step();
-    return () => { active = false; };
+  // Sync audio ticks to the actual wheel position
+  const useSoundTick = (isSpinning) => {
+    const lastIndex = useRef(-1);
+
+    useEffect(() => {
+      if (!isSpinning) return;
+      
+      let frameId;
+      const checkPosition = () => {
+        if (!containerRef.current) return;
+        
+        // Extract the translate from the computed style
+        const transform = window.getComputedStyle(containerRef.current).transform;
+        const matrix = new DOMMatrixReadOnly(transform);
+        const currentY = matrix.m42;
+        
+        const currentIndex = Math.floor(Math.abs(currentY) / SLOT_HEIGHT);
+        if (currentIndex !== lastIndex.current) {
+          playTick();
+          lastIndex.current = currentIndex;
+        }
+        
+        frameId = requestAnimationFrame(checkPosition);
+      };
+      
+      frameId = requestAnimationFrame(checkPosition);
+      return () => cancelAnimationFrame(frameId);
+    }, [isSpinning]);
   };
 
+  useSoundTick(spinning);
+
   const startSpin = () => {
-    runAudioTicks();
     spin();
   };
 
