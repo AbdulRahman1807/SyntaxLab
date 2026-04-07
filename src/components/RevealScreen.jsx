@@ -37,38 +37,144 @@ function DecryptText({ text, duration = 1200 }) {
   return <span>{displayText}</span>;
 }
 
-// --- Live Grid Crosshair Component ---
-function CrosshairGrid() {
-  const [pos, setPos] = useState({ x: -100, y: -100 });
+// --- Wave Squares Grid Component (Canvas) ---
+function WaveSquaresGrid() {
+  const canvasRef = React.useRef(null);
+  const mouseRef = React.useRef({ x: -1000, y: -1000 });
+  const ripplesRef = React.useRef([]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+    let time = 0;
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const size = 50; // Grid cell spacing
+    const maxSize = 34; // Maximum size of a square
+
+    const render = () => {
+      time += 0.03;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const cols = Math.ceil(canvas.width / size) + 2;
+      const rows = Math.ceil(canvas.height / size) + 2;
+
+      // Update outgoing ripples
+      for (let i = ripplesRef.current.length - 1; i >= 0; i--) {
+        const r = ripplesRef.current[i];
+        r.radius += 8; // wave expansion speed
+        r.life -= 0.015; // wave dissipation
+        if (r.life <= 0) ripplesRef.current.splice(i, 1);
+      }
+
+      // Draw squares
+      for (let y = -1; y < rows; y++) {
+        for (let x = -1; x < cols; x++) {
+          const cx = x * size + size / 2;
+          const cy = y * size + size / 2;
+
+          // 1. Natural Sloshing Physics
+          const wave1 = Math.sin(time * 0.8 + x * 0.1 + y * 0.15);
+          const wave2 = Math.cos(time * 0.5 - x * 0.2 + y * 0.1);
+          const wave3 = Math.sin(time * 0.4 + x * 0.05 - y * 0.2);
+          const slosh = (wave1 + wave2 + wave3) / 3; // Normalize from -1 to 1
+
+          let scale = 0.2 + slosh * 0.15; // Base continuous breathing
+          let brightness = 0.05 + ((slosh + 1) / 2) * 0.1;
+
+          // 2. Cursor Proximity Glow
+          const dx = mouseRef.current.x - cx;
+          const dy = mouseRef.current.y - cy;
+          const distToMouse = Math.sqrt(dx * dx + dy * dy);
+          if (distToMouse < 200) {
+            const effect = 1 - (distToMouse / 200);
+            scale += effect * 0.3;
+            brightness += effect * 0.4;
+          }
+
+          // 3. Outgoing Cursor Ripples ("Waves of Brightness")
+          for (const r of ripplesRef.current) {
+            const rdx = r.x - cx;
+            const rdy = r.y - cy;
+            const distToRipple = Math.sqrt(rdx * rdx + rdy * rdy);
+            
+            // Influence ring around the expanding radius
+            const ringDist = Math.abs(distToRipple - r.radius);
+            if (ringDist < 80) {
+              const effect = (1 - (ringDist / 80)) * r.life;
+              scale += effect * 0.6;
+              brightness += effect * 0.7;
+            }
+          }
+
+          // Clamp values
+          scale = Math.min(Math.max(scale, 0.05), 1);
+          brightness = Math.min(Math.max(brightness, 0.01), 1);
+
+          const finalSize = maxSize * scale;
+
+          ctx.fillStyle = `rgba(255, 255, 255, ${brightness})`;
+          ctx.beginPath();
+          
+          // Draw standard squares, centered perfectly
+          ctx.rect(cx - finalSize / 2, cy - finalSize / 2, finalSize, finalSize);
+          ctx.fill();
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
+
+  const handleMouseMove = (e) => {
+    const { clientX, clientY } = e;
+    
+    // Add a ripple if the mouse moves far enough or if it's the first move
+    if (mouseRef.current.x === -1000) {
+      ripplesRef.current.push({ x: clientX, y: clientY, radius: 0, life: 1 });
+    } else {
+      const dx = clientX - mouseRef.current.x;
+      const dy = clientY - mouseRef.current.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 40) { 
+        ripplesRef.current.push({ x: clientX, y: clientY, radius: 0, life: 1 });
+      }
+    }
+    
+    mouseRef.current = { x: clientX, y: clientY };
+  };
+
+  const handleMouseLeave = () => {
+    mouseRef.current = { x: -1000, y: -1000 };
+  };
+
   return (
-    <div 
+    <canvas
+      ref={canvasRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       style={{
-        position: 'absolute', inset: 0, zIndex: 0,
-        pointerEvents: 'auto', // Catches all mouse moves over the screen safely
-        overflow: 'hidden',
-        backgroundSize: '80px 80px', // Massive blueprint coordinates
-        backgroundImage: 'linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px)'
-      }}
-      onMouseMove={(e) => setPos({ x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY })}
-    >
-      {/* Horizontal Alignment Line */}
-      <div style={{
-        position: 'absolute', top: pos.y, left: 0, right: 0, height: 1,
-        background: 'rgba(255,255,255,0.1)', pointerEvents: 'none'
-      }} />
-      {/* Vertical Alignment Line */}
-      <div style={{
-        position: 'absolute', left: pos.x, top: 0, bottom: 0, width: 1,
-        background: 'rgba(255,255,255,0.1)', pointerEvents: 'none'
-      }} />
-      {/* Dynamic Activated Cell */}
-      <div style={{
         position: 'absolute',
-        left: Math.floor(pos.x / 80) * 80, top: Math.floor(pos.y / 80) * 80,
-        width: 80, height: 80, background: 'rgba(255,255,255,0.06)', pointerEvents: 'none',
-        transition: 'left 0.1s linear, top 0.1s linear' // Adds slight smoothness to cell jumps
-      }} />
-    </div>
+        inset: 0,
+        zIndex: 0,
+        pointerEvents: 'auto',
+      }}
+    />
   );
 }
 
@@ -137,11 +243,11 @@ export default function RevealScreen({ teamName, onStartLab, onBack }) {
       overflow: 'hidden',
     }}>
       {/* Component Layers */}
-      <CrosshairGrid />
+      <WaveSquaresGrid />
       <TerminalBootLog teamName={teamName} />
 
       {/* Front-and-Center Content */}
-      <div style={{ position: 'relative', textAlign: 'center', padding: '0 32px', zIndex: 10, pointerEvents: 'none' }}>
+      <div style={{ position: 'relative', textAlign: 'center', padding: '0 32px', zIndex: 10, pointerEvents: 'none', mixBlendMode: 'difference' }}>
         <motion.p
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -151,7 +257,7 @@ export default function RevealScreen({ teamName, onStartLab, onBack }) {
             fontWeight: 700,
             letterSpacing: '0.2em',
             textTransform: 'uppercase',
-            color: 'var(--text-secondary)',
+            color: '#fff',
             marginBottom: 16,
           }}
         >
@@ -165,7 +271,7 @@ export default function RevealScreen({ teamName, onStartLab, onBack }) {
           style={{
             fontSize: 'clamp(3rem, 10vw, 6rem)',
             fontWeight: 900,
-            color: 'var(--text-primary)',
+            color: '#fff',
             letterSpacing: '0.05em', // Spread out slightly for terminal block styling
             lineHeight: 1.1,
             marginBottom: 48,

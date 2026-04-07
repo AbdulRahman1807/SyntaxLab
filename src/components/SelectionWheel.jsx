@@ -1,15 +1,11 @@
-import { useState, useRef } from 'react';
-import { motion, useAnimation } from 'framer-motion';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import MagneticButton from './MagneticButton';
 
-// Weighted random — all teams equal weight for now
+// Weighted random — all teams equal weight
 function weightedRandom(teams) {
   if (!teams.length) return null;
   return teams[Math.floor(Math.random() * teams.length)];
 }
-
-const SLOT_HEIGHT = 56;
-const VISIBLE_SLOTS = 7;
 
 function playTick() {
   try {
@@ -18,190 +14,239 @@ function playTick() {
     const gainNode = audioCtx.createGain();
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
-    
+
     osc.type = 'sine';
     osc.frequency.setValueAtTime(800, audioCtx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.05);
-    
+
     gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
-    
+
     osc.start();
     osc.stop(audioCtx.currentTime + 0.05);
-  } catch(e) { /* ignore */ }
+  } catch (e) { /* ignore */ }
+}
+
+// Easing function: smoother deceleration curve
+function easeOutQuint(t) {
+  return 1 - Math.pow(1 - t, 5);
 }
 
 export default function SelectionWheel({ teams, onPicked, onReset, hasCompleted, onSpinStateChange }) {
   const [spinning, setSpinning] = useState(false);
-  const [displayList, setDisplayList] = useState([]);
-  const [pulse, setPulse] = useState(false);
-  const [winIndex, setWinIndex] = useState(-1);
-  const controls = useAnimation();
-  const containerRef = useRef(null);
+  const [frontText, setFrontText] = useState('');
+  const [backText, setBackText] = useState('');
+  const [rotation, setRotation] = useState(0);
+  const [settled, setSettled] = useState(false);
+  const [winner, setWinner] = useState(null);
+  const animFrameRef = useRef(null);
+  const cardRef = useRef(null);
 
-  async function spin() {
+  // Show first team name on idle
+  useEffect(() => {
+    if (!spinning && teams.length > 0 && !winner) {
+      setFrontText(teams[0]);
+      setRotation(0);
+    }
+  }, [teams, spinning, winner]);
+
+  // Determine which face is currently visible based on rotation
+  const isFrontVisible = useCallback(() => {
+    const normalized = ((rotation % 360) + 360) % 360;
+    return normalized < 90 || normalized >= 270;
+  }, [rotation]);
+
+  const spin = useCallback(() => {
     if (spinning || teams.length === 0) return;
+
     setSpinning(true);
+    setSettled(false);
+    setWinner(null);
     if (onSpinStateChange) onSpinStateChange(true);
 
-    const winner = weightedRandom(teams);
-    // Build a long padded list so wheel scrolls through many slots
-    const repeats = 40;
-    const extended = [];
-    for (let i = 0; i < repeats; i++) {
-      extended.push(...teams);
-    }
-    // Force the winner at a certain position near the end
-    const targetIndex = Math.floor(repeats * teams.length * 0.8) + teams.indexOf(winner);
-    extended.splice(targetIndex, 1, winner);
-    setDisplayList(extended);
-    setWinIndex(targetIndex);
+    const chosenWinner = weightedRandom(teams);
 
-    // Scroll to center on targetIndex
-    const targetY = -(targetIndex * SLOT_HEIGHT) + (Math.floor(VISIBLE_SLOTS / 2) * SLOT_HEIGHT);
+    // Build a sequence of teams to flip through backwards to guarantee no consecutive duplicates
+    const totalFlips = 20 + Math.floor(Math.random() * 10);
+    const sequence = new Array(totalFlips);
+    sequence[totalFlips - 1] = chosenWinner;
 
-    // Reset position instantly
-    await controls.set({ y: 0 });
-
-    // Spin animation with custom onUpdate for tick sound
-    let lastTickPosition = 0;
-    
-    await controls.start({
-      y: targetY,
-      transition: {
-        duration: 4,
-        ease: [0.1, 0.6, 0.2, 1],
+    for (let i = totalFlips - 2; i >= 0; i--) {
+      let candidates = teams;
+      if (teams.length > 1) {
+        // Prevent next flip object from being identical
+        candidates = candidates.filter(t => t !== sequence[i + 1]);
       }
-    });
+      sequence[i] = candidates[Math.floor(Math.random() * candidates.length)];
+    }
 
-    setSpinning(false);
-    if (onSpinStateChange) onSpinStateChange(false);
-    setPulse(true);
-    setTimeout(() => {
-      setPulse(false);
-      if (onPicked) onPicked(winner);
-    }, 1200); // Wait 1.2s to admire the pulse before moving to REVEAL
-  }
+    const totalDuration = 6000; // 6 seconds for slower animation
+    let flipIndex = 0;
+    let startTime = null;
 
-  // To play tick, we can use useAnimationFrame or onUpdate. 
-  // framer-motion does not support onUpdate on transition directly,
-  // so we'll just let the visual spin happen. The audio could be synced carefully, 
-  // but to keep it simple, we will trigger ticks during spin 
-  // using an interval that slows down.
-  const runAudioTicks = () => {
-    if (spinning || teams.length === 0) return;
-    let delay = 30;
-    let active = true;
-    
-    const step = () => {
-      if (!active) return;
-      playTick();
-      delay += delay * 0.15; // slow down
-      if (delay < 400) {
-        setTimeout(step, delay);
+    // Initialize faces
+    setFrontText(sequence[0]);
+    setBackText(sequence[1] || sequence[0]);
+    setRotation(0);
+
+    const animate = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+      const progress = Math.min(elapsed / totalDuration, 1);
+
+      // How many flips should have happened by now (eased)
+      const easedProgress = easeOutQuint(progress);
+      const targetFlipIndex = Math.floor(easedProgress * totalFlips);
+
+      // Process any new flips
+      while (flipIndex < targetFlipIndex && flipIndex < totalFlips) {
+        flipIndex++;
+        playTick();
+
+        const currentTeam = sequence[Math.min(flipIndex, sequence.length - 1)];
+        const nextTeam = sequence[Math.min(flipIndex + 1, sequence.length - 1)];
+
+        // Alternate which face shows the current team
+        if (flipIndex % 2 === 0) {
+          setFrontText(currentTeam);
+          setBackText(nextTeam);
+        } else {
+          setBackText(currentTeam);
+          setFrontText(nextTeam);
+        }
+      }
+
+      // Smoothly interpolate rotation between flips
+      const exactFlip = easedProgress * totalFlips;
+      setRotation(exactFlip * 180);
+
+      if (progress < 1) {
+        animFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        // Landed — ensure final state
+        const finalRotation = totalFlips * 180;
+        setRotation(finalRotation);
+
+        // Make sure the winner is visible on the correct face
+        if (totalFlips % 2 === 0) {
+          setFrontText(chosenWinner);
+        } else {
+          setBackText(chosenWinner);
+        }
+
+        // Settle bounce
+        setSettled(true);
+        setWinner(chosenWinner);
+        setSpinning(false);
+        if (onSpinStateChange) onSpinStateChange(false);
+
+        // Trigger onPicked after admiring
+        setTimeout(() => {
+          setSettled(false);
+          if (onPicked) onPicked(chosenWinner);
+        }, 1400);
       }
     };
-    step();
-    return () => { active = false; };
-  };
 
-  const startSpin = () => {
-    runAudioTicks();
-    spin();
-  };
+    animFrameRef.current = requestAnimationFrame(animate);
 
-  const listToShow = displayList.length > 0 ? displayList : teams;
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [spinning, teams, onPicked, onSpinStateChange]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, []);
+
+  const hasTeams = teams.length > 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, width: '100%' }}>
-      {/* Wheel container */}
-      <div
-        style={{
-          position: 'relative',
-          width: '100%',
-          maxWidth: 400,
-          height: SLOT_HEIGHT * VISIBLE_SLOTS,
-          overflow: 'hidden',
-          borderRadius: 8,
-          background: 'rgba(20, 20, 20, 0.4)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.5)',
-        }}
-      >
-        {/* Gradient overlays for fade effect */}
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
-          background: 'linear-gradient(to bottom, rgba(16,16,16,0.95) 0%, transparent 40%, transparent 60%, rgba(16,16,16,0.95) 100%)'
-        }} />
+      {/* Rolodex card wrapper */}
+      <div className="rolodex-perspective" style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+        <div
+          ref={cardRef}
+          className={`rolodex-card ${settled ? 'rolodex-settle' : ''}`}
+          style={{
+            transform: `rotateX(${rotation}deg)`,
+            transition: spinning ? 'none' : 'transform 0.3s ease',
+          }}
+        >
+          {/* Front face */}
+          <div className={`rolodex-face ${winner && settled ? 'rolodex-winner' : ''}`}>
+            {hasTeams ? (
+              <span>{frontText}</span>
+            ) : (
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.95rem', fontWeight: 400 }}>
+                No active teams
+              </span>
+            )}
 
-        {/* Center highlight */}
-        <div style={{
-          position: 'absolute', top: '50%', left: 0, right: 0,
-          height: SLOT_HEIGHT,
-          transform: 'translateY(-50%)',
-          background: 'rgba(255,255,255,0.03)',
-          borderTop: '1px solid var(--border-bright)',
-          borderBottom: '1px solid var(--border-bright)',
-          zIndex: 1, pointerEvents: 'none',
-          animation: pulse ? 'pulse-glow 1.2s ease-out' : 'none',
-        }} />
-
-        {/* Scrolling list */}
-        <motion.div ref={containerRef} animate={controls} style={{ willChange: 'transform' }}>
-          {listToShow.map((team, i) => (
-            <div key={i} className={pulse && i === winIndex ? 'glitch-text' : ''} style={{
-              height: SLOT_HEIGHT,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1rem',
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              letterSpacing: '0.02em',
-              userSelect: 'none',
-            }}>
-              {team}
-            </div>
-          ))}
-        </motion.div>
-
-        {/* Empty state */}
-        {teams.length === 0 && (
-          <div style={{
-            position: 'absolute', inset: 0, display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-            color: 'var(--text-muted)', fontSize: '0.9rem', zIndex: 3
-          }}>
-            No active teams
+            {/* Subtle horizontal lines for depth */}
+            <div style={{
+              position: 'absolute', top: 0, left: '10%', right: '10%', height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)'
+            }} />
+            <div style={{
+              position: 'absolute', bottom: 0, left: '10%', right: '10%', height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)'
+            }} />
           </div>
-        )}
+
+          {/* Back face */}
+          <div className={`rolodex-face rolodex-face--back ${winner && settled ? 'rolodex-winner' : ''}`}>
+            <span>{backText}</span>
+
+            <div style={{
+              position: 'absolute', top: 0, left: '10%', right: '10%', height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)'
+            }} />
+            <div style={{
+              position: 'absolute', bottom: 0, left: '10%', right: '10%', height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)'
+            }} />
+          </div>
+        </div>
       </div>
 
-        {teams.length === 0 && hasCompleted ? (
-          <MagneticButton
-            className="btn btn-primary"
-            onClick={onReset}
-            style={{ fontSize: '1rem', padding: '12px 40px' }}
-          >
-            ↺ Reset Session
-          </MagneticButton>
-        ) : (
-          <MagneticButton
-            className="btn btn-primary"
-            onClick={startSpin}
-            disabled={spinning || teams.length === 0}
-            style={{ fontSize: '1rem', padding: '12px 40px', opacity: teams.length === 0 ? 0.4 : 1 }}
-          >
-            {spinning ? (
-              <>
-                <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
-                Selecting...
-              </>
-            ) : 'Select Team'}
-          </MagneticButton>
-        )}
+      {/* Subtle reflection beneath card */}
+      <div style={{
+        width: '60%',
+        maxWidth: 240,
+        height: 20,
+        background: 'radial-gradient(ellipse, rgba(255,255,255,0.04) 0%, transparent 70%)',
+        marginTop: -16,
+        pointerEvents: 'none',
+      }} />
+
+      {/* Action button */}
+      {teams.length === 0 && hasCompleted ? (
+        <MagneticButton
+          className="btn btn-primary"
+          onClick={onReset}
+          style={{ fontSize: '1rem', padding: '12px 40px' }}
+        >
+          ↺ Reset Session
+        </MagneticButton>
+      ) : (
+        <MagneticButton
+          className="btn btn-primary"
+          onClick={spin}
+          disabled={spinning || teams.length === 0}
+          style={{ fontSize: '1rem', padding: '12px 40px', opacity: teams.length === 0 ? 0.4 : 1 }}
+        >
+          {spinning ? (
+            <>
+              <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
+              Selecting...
+            </>
+          ) : 'Select Team'}
+        </MagneticButton>
+      )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>

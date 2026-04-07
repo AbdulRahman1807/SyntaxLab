@@ -1,6 +1,82 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
+// High-performance Canvas Background
+function WorkspaceBackground({ isRunning }) {
+  const canvasRef = useRef(null);
+  
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let frameId;
+    let time = 0;
+
+    const resize = () => {
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+    };
+    // Wait for layout
+    setTimeout(resize, 0);
+    window.addEventListener('resize', resize);
+
+    const particles = Array.from({ length: 50 }).map(() => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      speed: 0.3 + Math.random() * 0.7,
+      size: 1 + Math.random() * 1.5,
+      flash: Math.random() * 100
+    }));
+
+    const render = () => {
+      time += 0.01;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Faint isometric/dotted background grid
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+      const spacing = 40;
+      for (let x = 0; x < canvas.width; x += spacing) {
+        for (let y = 0; y < canvas.height; y += spacing) {
+          ctx.beginPath();
+          ctx.arc(x, y, 1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Flowing data packets
+      particles.forEach(p => {
+        p.y += isRunning ? p.speed * 4 : p.speed * 1;
+        if (p.y > canvas.height + 50) {
+          p.y = -50;
+          p.x = Math.random() * canvas.width;
+        }
+
+        ctx.beginPath();
+        if (isRunning) {
+          // Soft ambient pulse when running
+          ctx.fillStyle = `rgba(255, 255, 255, ${0.1 + (Math.sin(time * p.speed * 10) * 0.15)})`;
+          ctx.arc(p.x, p.y, p.size * 1.5, 0, Math.PI * 2);
+        } else {
+          // Idling small dust
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        }
+        ctx.fill();
+      });
+
+      frameId = requestAnimationFrame(render);
+    };
+    render();
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(frameId);
+    };
+  }, [isRunning]);
+
+  return <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }} />;
+}
+
 export default function Workspace({ teamName, onExit }) {
   const [databases, setDatabases] = useState([]);
   const [selectedDb, setSelectedDb] = useState('');
@@ -12,12 +88,17 @@ export default function Workspace({ teamName, onExit }) {
   const [tablesLoading, setTablesLoading] = useState(false);
   const editorRef = useRef(null);
 
-  // Load databases on mount
-  useEffect(() => {
+  // Load databases
+  const refreshDatabases = useCallback(() => {
+    setDbLoading(true);
     axios.get('/api/databases')
       .then(res => {
         setDatabases(res.data);
-        if (res.data.length > 0) setSelectedDb(res.data[0]);
+        // Only select the first database if the current one was dropped or doesn't exist
+        setSelectedDb(prev => {
+          if (prev && res.data.includes(prev)) return prev;
+          return res.data.length > 0 ? res.data[0] : '';
+        });
       })
       .catch(err => {
         setDatabases([]);
@@ -26,8 +107,11 @@ export default function Workspace({ teamName, onExit }) {
       .finally(() => setDbLoading(false));
   }, []);
 
-  // Load tables when selectedDb changes
   useEffect(() => {
+    refreshDatabases();
+  }, [refreshDatabases]);
+
+  const refreshTables = useCallback(() => {
     if (!selectedDb) return;
     setTablesLoading(true);
     setTables([]);
@@ -37,6 +121,33 @@ export default function Workspace({ teamName, onExit }) {
       .finally(() => setTablesLoading(false));
   }, [selectedDb]);
 
+  // Load tables when selectedDb changes
+  useEffect(() => {
+    refreshTables();
+  }, [refreshTables]);
+
+  const isDDL = (q) => {
+    const upper = q.trim().toUpperCase();
+    return upper.startsWith('CREATE ') || upper.startsWith('ALTER ') || upper.startsWith('DROP ') || upper.startsWith('RENAME ');
+  };
+
+  const uppercaseKeywords = (text) => {
+    const keywords = new Set(['ABORT', 'ABSOLUTE', 'ACCESS', 'ACTION', 'ADD', 'ADMIN', 'AFTER', 'AGGREGATE', 'ALL', 'ALSO', 'ALTER', 'ALWAYS', 'ANALYSE', 'ANALYZE', 'AND', 'ANY', 'ARRAY', 'AS', 'ASC', 'ASSERTION', 'ASSIGNMENT', 'ASYMMETRIC', 'AT', 'AUTHORIZATION', 'BACKWARD', 'BEFORE', 'BEGIN', 'BETWEEN', 'BIGINT', 'BINARY', 'BIT', 'BOOLEAN', 'BOTH', 'BY', 'CACHE', 'CALLED', 'CASCADE', 'CASCADED', 'CASE', 'CAST', 'CATALOG', 'CHAIN', 'CHAR', 'CHARACTER', 'CHARACTERISTICS', 'CHECK', 'CHECKPOINT', 'CLASS', 'CLOSE', 'CLUSTER', 'COALESCE', 'COLLATE', 'COLLATION', 'COLUMN', 'COMMENT', 'COMMENTS', 'COMMIT', 'COMMITTED', 'CONCURRENTLY', 'CONFIGURATION', 'CONNECTION', 'CONSTRAINT', 'CONSTRAINTS', 'CONTENT', 'CONTINUE', 'CONVERSION', 'COPY', 'COST', 'CREATE', 'CROSS', 'CSV', 'CUBE', 'CURRENT', 'CURRENT_CATALOG', 'CURRENT_DATE', 'CURRENT_ROLE', 'CURRENT_SCHEMA', 'CURRENT_TIME', 'CURRENT_TIMESTAMP', 'CURRENT_USER', 'CURSOR', 'CYCLE', 'DATA', 'DATABASE', 'DAY', 'DEALLOCATE', 'DEC', 'DECIMAL', 'DECLARE', 'DEFAULT', 'DEFAULTS', 'DEFERRABLE', 'DEFERRED', 'DEFINER', 'DELETE', 'DELIMITER', 'DELIMITERS', 'DESC', 'DICTIONARY', 'DISABLE', 'DISCARD', 'DISTINCT', 'DO', 'DOCUMENT', 'DOMAIN', 'DOUBLE', 'DROP', 'EACH', 'ELSE', 'ENABLE', 'ENCODING', 'ENCRYPTED', 'END', 'ENUM', 'ESCAPE', 'EVENT', 'EXCEPT', 'EXCLUDE', 'EXCLUDING', 'EXCLUSIVE', 'EXECUTE', 'EXISTS', 'EXPLAIN', 'EXTENSION', 'EXTERNAL', 'EXTRACT', 'FALSE', 'FAMILY', 'FETCH', 'FILTER', 'FIRST', 'FLOAT', 'FOLLOWING', 'FOR', 'FORCE', 'FOREIGN', 'FORWARD', 'FREEZE', 'FROM', 'FULL', 'FUNCTION', 'FUNCTIONS', 'GLOBAL', 'GRANT', 'GRANTED', 'GREATEST', 'GROUP', 'GROUPING', 'HANDLER', 'HAVING', 'HEADER', 'HOLD', 'HOUR', 'IDENTITY', 'IF', 'ILIKE', 'IMMEDIATE', 'IMMUTABLE', 'IMPLICIT', 'IMPORT', 'IN', 'INCLUDING', 'INCREMENT', 'INDEX', 'INDEXES', 'INHERIT', 'INHERITS', 'INITIALLY', 'INLINE', 'INNER', 'INOUT', 'INPUT', 'INSENSITIVE', 'INSERT', 'INSTEAD', 'INT', 'INTEGER', 'INTERSECT', 'INTERVAL', 'INTO', 'INVOKER', 'IS', 'ISNULL', 'ISOLATION', 'JOIN', 'KEY', 'LABEL', 'LANGUAGE', 'LARGE', 'LAST', 'LATERAL', 'LEADING', 'LEAKPROOF', 'LEAST', 'LEFT', 'LEVEL', 'LIKE', 'LIMIT', 'LISTEN', 'LOAD', 'LOCAL', 'LOCALTIME', 'LOCALTIMESTAMP', 'LOCATION', 'LOCK', 'LOCKED', 'LOGGED', 'MAPPING', 'MATCH', 'MATERIALIZED', 'MAXVALUE', 'MINUTE', 'MINVALUE', 'MODE', 'MONTH', 'MOVE', 'NAME', 'NAMES', 'NATIONAL', 'NATURAL', 'NCHAR', 'NEXT', 'NO', 'NONE', 'NOT', 'NOTHING', 'NOTIFY', 'NOTNULL', 'NOWAIT', 'NULL', 'NULLIF', 'NULLS', 'NUMERIC', 'OBJECT', 'OF', 'OFF', 'OFFSET', 'OIDS', 'ON', 'ONLY', 'OPERATOR', 'OPTION', 'OPTIONS', 'OR', 'ORDER', 'ORDINALITY', 'OUT', 'OUTER', 'OVER', 'OVERLAPS', 'OVERLAY', 'OWNED', 'OWNER', 'PARSER', 'PARTIAL', 'PARTITION', 'PASSING', 'PASSWORD', 'PLACING', 'PLANS', 'POLICY', 'POSITION', 'PRECEDING', 'PRECISION', 'PREPARE', 'PREPARED', 'PRESERVE', 'PRIMARY', 'PRIOR', 'PRIVILEGES', 'PROCEDURAL', 'PROCEDURE', 'PROGRAM', 'QUOTE', 'RANGE', 'READ', 'REAL', 'REASSIGN', 'RECHECK', 'RECURSIVE', 'REF', 'REFERENCES', 'REFERENCING', 'REFRESH', 'REINDEX', 'RELATIVE', 'RELEASE', 'RENAME', 'REPEATABLE', 'REPLACE', 'REPLICA', 'RESET', 'RESTART', 'RESTRICT', 'RETURNING', 'RETURNS', 'REVOKE', 'RIGHT', 'ROLE', 'ROLLBACK', 'ROLLUP', 'ROW', 'ROWS', 'RULE', 'SAVEPOINT', 'SCHEMA', 'SCROLL', 'SEARCH', 'SECOND', 'SECURITY', 'SELECT', 'SEQUENCE', 'SEQUENCES', 'SERIALIZABLE', 'SERVER', 'SESSION', 'SESSION_USER', 'SET', 'SETOF', 'SETS', 'SHARE', 'SHOW', 'SIMILAR', 'SIMPLE', 'SMALLINT', 'SNAPSHOT', 'SOME', 'SQL', 'STABLE', 'STANDALONE', 'START', 'STATEMENT', 'STATISTICS', 'STDIN', 'STDOUT', 'STORAGE', 'STRICT', 'STRIP', 'SUBSTRING', 'SYMMETRIC', 'SYSID', 'SYSTEM', 'TABLE', 'TABLES', 'TABLESPACE', 'TEMP', 'TEMPLATE', 'TEMPORARY', 'TEXT', 'THEN', 'TIME', 'TIMESTAMP', 'TO', 'TRAILING', 'TRANSACTION', 'TRANSFORM', 'TREAT', 'TRIGGER', 'TRIM', 'TRUE', 'TRUNCATE', 'TRUSTED', 'TYPE', 'TYPES', 'UNBOUNDED', 'UNCOMMITTED', 'UNENCRYPTED', 'UNION', 'UNIQUE', 'UNKNOWN', 'UNLISTEN', 'UNLOGGED', 'UNTIL', 'UPDATE', 'USER', 'USING', 'VACUUM', 'VALID', 'VALIDATE', 'VALIDATOR', 'VALUE', 'VALUES', 'VARCHAR', 'VARIADIC', 'VARYING', 'VERBOSE', 'VERSION', 'VIEW', 'VIEWS', 'VOLATILE', 'WHEN', 'WHERE', 'WINDOW', 'WITH', 'WITHIN', 'WITHOUT', 'WORK', 'WRAPPER', 'WRITE', 'XML', 'XMLATTRIBUTES', 'XMLCONCAT', 'XMLELEMENT', 'XMLEXISTS', 'XMLFOREST', 'XMLPARSE', 'XMLPI', 'XMLROOT', 'XMLSERIALIZE', 'YEAR', 'YES', 'ZONE']);
+    const words = text.split(/(\s+|[(),;])/);
+    return words.map((word, index) => {
+      const upper = word.toUpperCase();
+      if (keywords.has(upper)) {
+        // Wait until the user finishes the word (by hitting space/punctuation)
+        // If it's the very last token in the array, they are currently still typing it
+        if (index === words.length - 1) {
+          return word;
+        }
+        return upper;
+      }
+      return word;
+    }).join('');
+  };
+
   const executeQuery = useCallback(async () => {
     if (!query.trim() || !selectedDb) return;
     setLoading(true);
@@ -44,12 +155,21 @@ export default function Workspace({ teamName, onExit }) {
     try {
       const res = await axios.post('/api/execute', { dbName: selectedDb, query });
       setResult(res.data);
+      
+      const upperQ = query.trim().toUpperCase();
+      if (upperQ.includes('CREATE DATABASE') || upperQ.includes('DROP DATABASE')) {
+        refreshDatabases();
+      }
+      
+      if (isDDL(query)) {
+        refreshTables();
+      }
     } catch (err) {
       setResult({ error: err.response?.data?.error || err.message });
     } finally {
       setLoading(false);
     }
-  }, [query, selectedDb]);
+  }, [query, selectedDb, refreshTables, refreshDatabases]);
 
   // Ctrl+Enter shortcut
   function handleEditorKeyDown(e) {
@@ -178,7 +298,10 @@ export default function Workspace({ teamName, onExit }) {
       </aside>
 
       {/* ===== MAIN CONTENT ===== */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+        <WorkspaceBackground isRunning={loading} />
+        
+        {/* Child components need z-index up to sit above canvas */}
         {/* Toolbar */}
         <div style={{
           padding: '12px 20px',
@@ -187,6 +310,8 @@ export default function Workspace({ teamName, onExit }) {
           display: 'flex',
           alignItems: 'center',
           gap: 12,
+          position: 'relative',
+          zIndex: 2,
         }}>
           <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
             {selectedDb ? (
@@ -210,23 +335,28 @@ export default function Workspace({ teamName, onExit }) {
           padding: '16px 20px',
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg-surface)',
+          position: 'relative',
+          zIndex: 2,
         }}>
           <textarea
             ref={editorRef}
-            className="mono input-field"
+            className={`mono input-field editor-glow ${loading ? 'is-running' : result?.error ? 'is-error' : result && !result.error ? 'is-success' : ''}`}
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => {
+              setResult(null); // Clear success state so neon re-triggers
+              setQuery(uppercaseKeywords(e.target.value));
+            }}
             onKeyDown={handleEditorKeyDown}
             rows={8}
             spellCheck={false}
             style={{
+              width: '100%',
               resize: 'vertical',
               minHeight: 120,
               fontSize: '0.9rem',
               lineHeight: 1.7,
               tabSize: 2,
               background: 'var(--bg-base)',
-              border: '1px solid var(--border)',
               borderRadius: 10,
               color: '#e6edf3',
               padding: '14px 16px',
@@ -235,7 +365,7 @@ export default function Workspace({ teamName, onExit }) {
         </div>
 
         {/* Results area */}
-        <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: 20, position: 'relative', zIndex: 2 }}>
           {!result && !loading && (
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -308,12 +438,12 @@ export default function Workspace({ teamName, onExit }) {
                     </thead>
                     <tbody>
                       {result.rows.map((row, ri) => (
-                        <tr key={ri} style={{
-                          background: ri % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-panel)',
-                          transition: 'background 0.1s',
-                        }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-elevated)'}
-                          onMouseLeave={e => e.currentTarget.style.background = ri % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-panel)'}
+                        <tr key={ri} 
+                          className="results-table-row"
+                          style={{
+                            background: ri % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-panel)',
+                            animationDelay: `${ri * 0.03}s` // staggered entry cascade
+                          }}
                         >
                           {result.columns.map(col => (
                             <td key={col} style={{
@@ -345,6 +475,34 @@ export default function Workspace({ teamName, onExit }) {
               )}
             </div>
           )}
+        </div>
+
+        {/* Keyboard Shortcuts Footer */}
+        <div style={{
+          padding: '12px 20px',
+          background: 'var(--bg-panel)',
+          borderTop: '1px solid var(--border)',
+        }}>
+          <div className="shortcuts-bar">
+            <div className="shortcut-item">
+              <span className="shortcut-key">⌘</span>
+              <span className="shortcut-key">Enter</span>
+              <span>Run query</span>
+            </div>
+            <div className="shortcut-item">
+              <span className="shortcut-key">Tab</span>
+              <span>Auto-indent</span>
+            </div>
+            <div className="shortcut-item">
+              <span className="shortcut-key">⌘</span>
+              <span className="shortcut-key">K</span>
+              <span>Quick format SQL</span>
+            </div>
+            <div className="shortcut-item">
+              <span className="shortcut-key">Esc</span>
+              <span>Cancel selection</span>
+            </div>
+          </div>
         </div>
       </main>
     </div>
